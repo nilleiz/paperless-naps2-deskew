@@ -68,18 +68,43 @@ export MOCK_NON_ROOT=1
 exec "$@"
 STUB
 
+cat > "$tmp/bin/pdfimages" <<'STUB'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+echo "pdfimages $*" >> "${MOCK_LOG}"
+cat <<'OUT'
+page   num  type   width height color comp bpc  enc interp  object ID x-ppi y-ppi size ratio
+   1     0 image    1653  2338  rgb     3   8  jpeg   no         8  0   200   200  316K  77%
+OUT
+STUB
+
 cat > "$tmp/bin/pdftoppm" <<'STUB'
 #!/usr/bin/env bash
 set -Eeuo pipefail
 echo "pdftoppm $*" >> "${MOCK_LOG}"
 [[ "$1" == "-r" ]]
-[[ "$2" == "300" ]]
+[[ "$2" == "200" ]]
 [[ "$3" == "-png" ]]
 input_pdf="$4"
 output_prefix="$5"
 [[ "$input_pdf" == *.pdf ]]
 printf 'page one' > "${output_prefix}-1.png"
 printf 'page two' > "${output_prefix}-2.png"
+STUB
+
+cat > "$tmp/bin/gs" <<'STUB'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+echo "gs $*" >> "${MOCK_LOG}"
+out=""
+input="${@: -1}"
+for arg in "$@"; do
+  case "$arg" in
+    -sOutputFile=*) out="${arg#-sOutputFile=}" ;;
+  esac
+done
+[[ -n "$out" ]]
+printf 'compressed pdf' > "$out"
 STUB
 
 cat > "$tmp/bin/naps2" <<'STUB'
@@ -133,8 +158,11 @@ set -e
 grep -F -- 'usermod --uid 1000 --gid 1000 --home /naps2 naps2' "$tmp/mock.log" >/dev/null
 grep -F -- 'chown -R 1000:1000 /naps2' "$tmp/mock.log" >/dev/null
 grep -F -- 'gosu 1000:1000' "$tmp/mock.log" >/dev/null
-grep -F -- 'pdftoppm -r 300 -png' "$tmp/mock.log" >/dev/null
-grep -F -- 'naps2 console -i' "$tmp/mock.log" >/dev/null
+grep -F -- 'pdftoppm -r 200 -png' "$tmp/mock.log" >/dev/null
+grep -F -- 'pdfimages -list' "$tmp/mock.log" >/dev/null
 grep -F -- '.png;' "$tmp/mock.log" >/dev/null
 grep -F -- ' -f' "$tmp/mock.log" >/dev/null
 # The fake NAPS2 command above asserts that its -i value contains PNG pages and no PDF path.
+
+grep -F -- 'naps2 console -i' "$tmp/mock.log" >/dev/null
+grep -F -- 'gs -q -dNOPAUSE -dBATCH' "$tmp/mock.log" >/dev/null

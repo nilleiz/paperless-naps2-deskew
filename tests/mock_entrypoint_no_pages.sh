@@ -20,6 +20,21 @@ fi
 command /usr/bin/id "$@"
 STUB
 
+cat > "$tmp/bin/pdfimages" <<'STUB'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+echo "pdfimages $*" >> "${MOCK_LOG}"
+cat <<'OUT'
+page   num  type   width height color comp bpc  enc interp  object ID x-ppi y-ppi size ratio
+OUT
+STUB
+
+cat > "$tmp/bin/gs" <<'STUB'
+#!/usr/bin/env bash
+echo "gs should not be called" >> "${MOCK_LOG}"
+exit 99
+STUB
+
 cat > "$tmp/bin/pdftoppm" <<'STUB'
 #!/usr/bin/env bash
 set -Eeuo pipefail
@@ -44,7 +59,6 @@ INPUT_DIR="$tmp/input" \
 OUTPUT_DIR="$tmp/output" \
 WORK_DIR="$tmp/work" \
 POLL_SECONDS=1 \
-PDF_RENDER_DPI=300 \
 ARCHIVE_ORIGINALS=true \
 timeout 5 "$repo_root/entrypoint.sh"
 code=$?
@@ -53,8 +67,13 @@ set -e
 [[ "$code" -eq 124 ]]
 [[ -f "$tmp/input/.failed/no-pages.pdf" ]]
 [[ ! -e "$tmp/output/no-pages.pdf" ]]
-grep -F -- 'pdftoppm -r 300 -png' "$tmp/mock.log" >/dev/null
+grep -F -- 'pdftoppm -r 200 -png' "$tmp/mock.log" >/dev/null
 if grep -F -- 'naps2 should not be called' "$tmp/mock.log" >/dev/null; then
   echo "NAPS2 was called even though no pages were rendered" >&2
+  exit 1
+fi
+
+if grep -F -- 'gs should not be called' "$tmp/mock.log" >/dev/null; then
+  echo "Ghostscript was called even though no pages were rendered" >&2
   exit 1
 fi

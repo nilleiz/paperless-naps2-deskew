@@ -25,11 +25,13 @@ services:
 
 1. Your scanner writes PDFs to `/mnt/gd/paperless-ngx/scans`.
 2. `paperless-naps2-deskew` watches that folder as `/input`.
-3. For each stable top-level PDF, the container copies it to a temporary work directory, rasterizes its pages to PNG images with Poppler `pdftoppm`, and runs NAPS2 deskewing on those images.
-4. The deskewed image-based PDF is written atomically to `/mnt/gd/paperless-ngx/consume` as `/output`.
-5. Paperless-ngx consumes files from `/mnt/gd/paperless-ngx/consume`.
-6. On success, the original input is moved to `/input/.processed` when `ARCHIVE_ORIGINALS=true`; otherwise it is deleted.
-7. On failure, the original input is moved to `/input/.failed`.
+3. For each stable top-level PDF, the container copies it to a temporary work directory and detects the embedded scan DPI with Poppler `pdfimages -list`.
+4. It rasterizes pages to PNG images with Poppler `pdftoppm` at the selected source-aware DPI, then runs NAPS2 deskewing on those images.
+5. The NAPS2 PDF is optionally post-processed with Ghostscript to downsample and JPEG-compress scan images without using OCRmyPDF.
+6. The deskewed image-based PDF is written atomically to `/mnt/gd/paperless-ngx/consume` as `/output`.
+7. Paperless-ngx consumes files from `/mnt/gd/paperless-ngx/consume` and performs OCR afterward.
+8. On success, the original input is moved to `/input/.processed` when `ARCHIVE_ORIGINALS=true`; otherwise it is deleted.
+9. On failure, the original input is moved to `/input/.failed`.
 
 Paperless should **not** watch the scanner staging folder directly. If Paperless imports files before this container preprocesses them, the Paperless consume mount is pointed at the wrong directory.
 
@@ -47,7 +49,15 @@ services:
       INPUT_DIR: /input
       OUTPUT_DIR: /output
       POLL_SECONDS: 10
-      PDF_RENDER_DPI: 300
+      PDF_RENDER_DPI: auto
+      PDF_RENDER_DPI_FALLBACK: 200
+      PDF_RENDER_DPI_MIN: 150
+      PDF_RENDER_DPI_MAX: 300
+      POSTPROCESS_GHOSTSCRIPT: "true"
+      GS_DOWNSAMPLE_DPI: auto
+      GS_DOWNSAMPLE_DPI_FALLBACK: 200
+      GS_JPEG_QUALITY: 90
+      GS_COMPATIBILITY_LEVEL: "1.7"
       ARCHIVE_ORIGINALS: "true"
       NAPS2_EXTRA_ARGS: ""
     volumes:
@@ -66,11 +76,27 @@ A standalone copy of this service is available in [`compose.example.yml`](compos
 | `INPUT_DIR` | `/input` | Directory watched for top-level PDF files. |
 | `OUTPUT_DIR` | `/output` | Directory where processed PDFs are written. |
 | `POLL_SECONDS` | `10` | Poll interval and file-stability check interval. |
-| `PDF_RENDER_DPI` | `300` | DPI used when rasterizing PDF pages to PNG images before NAPS2 deskewing. Increase to `400` for potentially better quality at the cost of larger output files and longer processing time. |
+| `PDF_RENDER_DPI` | `auto` | DPI used when rasterizing PDF pages to PNG images before NAPS2 deskewing. `auto` is recommended: the watcher detects embedded scan DPI with `pdfimages -list` and preserves that DPI instead of blindly rendering everything at 300 dpi. You may also set a numeric DPI such as `200`, `250`, or `300`. |
+| `PDF_RENDER_DPI_FALLBACK` | `200` | Render DPI used when `PDF_RENDER_DPI=auto` and no valid embedded image DPI can be detected. |
+| `PDF_RENDER_DPI_MIN` | `150` | Lower clamp for detected or numeric render DPI values. |
+| `PDF_RENDER_DPI_MAX` | `300` | Upper clamp for detected or numeric render DPI values. |
+| `POSTPROCESS_GHOSTSCRIPT` | `true` | Run Ghostscript after NAPS2 to recompress/downsample the image-based PDF. If Ghostscript fails or produces an empty file, the watcher logs a warning and falls back to the uncompressed NAPS2 PDF. |
+| `GS_DOWNSAMPLE_DPI` | `auto` | Ghostscript color/gray image downsample DPI. `auto` uses the selected render/source DPI; a numeric value overrides it. Values are clamped with the same min/max DPI settings. |
+| `GS_DOWNSAMPLE_DPI_FALLBACK` | `200` | Ghostscript downsample DPI used if `GS_DOWNSAMPLE_DPI=auto` and no valid render DPI is available. |
+| `GS_JPEG_QUALITY` | `90` | JPEG quality passed to Ghostscript (`-dJPEGQ`). `90` is a good default for scan quality and file size. Lower values reduce file size but may create artifacts; higher values can improve visual quality but create larger files. |
+| `GS_COMPATIBILITY_LEVEL` | `1.7` | PDF compatibility level passed to Ghostscript. |
 | `ARCHIVE_ORIGINALS` | `true` | Move successful inputs to `/input/.processed` when true; delete them when false. |
 | `NAPS2_EXTRA_ARGS` | empty | Additional arguments appended to the NAPS2 command before `-o`. Simple whitespace-separated values are supported. |
 | `PUID` | `1000` | Runtime user id for the non-root watcher process. |
 | `PGID` | `1000` | Runtime group id for the non-root watcher process. |
+
+## DPI and output-size strategy
+
+The default pipeline is source-aware. Many scanner PDFs are already around 200 dpi and contain one efficiently compressed JPEG per page. Rendering those files at a fixed 300 dpi upscales the scan without adding real detail, increases the number of pixels NAPS2 has to process, and can make the final PDF much larger.
+
+With `PDF_RENDER_DPI=auto`, the watcher runs `pdfimages -list` before rasterizing, ignores invalid or empty DPI values, chooses a sensible detected image DPI, and clamps it between `PDF_RENDER_DPI_MIN` and `PDF_RENDER_DPI_MAX`. If no valid DPI is found, it uses `PDF_RENDER_DPI_FALLBACK` (200 dpi by default). For normal scanned documents, 200 dpi is usually enough and should usually remain around 200 dpi. Using 250 or 300 dpi may look slightly better for some scans, but it increases file size and processing time.
+
+After NAPS2 deskews the PNG imports, `POSTPROCESS_GHOSTSCRIPT=true` recompresses the temporary NAPS2 PDF. By default `GS_DOWNSAMPLE_DPI=auto` uses the same selected source/render DPI, and `GS_JPEG_QUALITY=90` keeps visual quality close to the original or Paperless-only output while reducing the oversized RGB image PDFs that NAPS2 can otherwise create. Lowering JPEG quality reduces file size but can introduce artifacts; increasing JPEG quality improves visual quality but creates larger files.
 
 ## NAPS2 home and optional persistent config
 
@@ -105,7 +131,8 @@ naps2 console -i "page-1.png;page-2.png" -n 0 --deskew --disableocr ${NAPS2_EXTR
 
 The important options are:
 
-- `pdftoppm -r "$PDF_RENDER_DPI" -png input.pdf page` renders the PDF pages to PNG images first.
+- `pdfimages -list input.pdf` detects embedded scan DPI when `PDF_RENDER_DPI=auto`.
+- `pdftoppm -r "$selected_render_dpi" -png input.pdf page` renders the PDF pages to PNG images first.
 - `-i` imports a semicolon-separated list of the rendered PNG page images.
 - `-n 0` prevents scanning and processes only imported pages.
 - `--deskew` enables automatic deskewing.
@@ -121,7 +148,8 @@ The official NAPS2 command-line documentation lists `--deskew` under post-proces
 - `/input/.processed`, `/input/.failed`, hidden directories, and nested files are ignored.
 - Hidden files and common partial/temp suffixes such as `.part`, `.partial`, `.tmp`, `.temp`, `.crdownload`, and backup `~` files are skipped.
 - A file is processed only after its size and modification timestamp remain unchanged across a polling interval.
-- PDF pages are rendered to PNG images at `PDF_RENDER_DPI` before NAPS2 imports them for deskewing.
+- PDF pages are rendered to PNG images at the selected source-aware render DPI before NAPS2 imports them for deskewing.
+- When `POSTPROCESS_GHOSTSCRIPT=true`, the NAPS2 PDF is recompressed with Ghostscript before final output.
 - Output is first written to a temporary file and then atomically moved into place.
 - Existing output files are never overwritten. If the original filename already exists, a UTC timestamp and, if necessary, a numeric suffix are appended.
 - Logs are one-line messages suitable for `docker logs`.
@@ -143,7 +171,8 @@ docker run --rm \
   -e PUID="$(id -u)" \
   -e PGID="$(id -g)" \
   -e POLL_SECONDS=2 \
-  -e PDF_RENDER_DPI=300 \
+  -e PDF_RENDER_DPI=auto \
+  -e POSTPROCESS_GHOSTSCRIPT=true \
   -v /tmp/naps2-deskew-test/input:/input \
   -v /tmp/naps2-deskew-test/output:/output \
   paperless-naps2-deskew:local
