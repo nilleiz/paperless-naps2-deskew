@@ -1,0 +1,10 @@
+.git
+.github
+.gitignore
+README.md
+compose.example.yml
+*.log
+*.tmp
+input
+output
+tests
