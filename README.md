@@ -193,8 +193,12 @@ It will:
 - Build pull requests without pushing an image.
 - Build pushes to `main` and push `latest` plus a SHA tag.
 - Build tags like `v1.2.3` and push semver tags such as `1.2.3`, `1.2`, `1`, plus a SHA tag.
+- Rebuild once per month on a schedule, pushing `latest`, a `monthly-YYYY-MM` tag, and a SHA tag to refresh the Docker image with current base image and Apt package versions.
+- Allow manual rebuilds from GitHub Actions, with an optional `no_cache` input for cache-free rebuilds on the default branch.
 - Push to `nillivanilli0815/paperless-naps2-deskew`.
 - Build `linux/amd64` by default.
+
+Scheduled monthly rebuilds intentionally set `pull: true` and `no-cache: true` so Docker pulls the current base image and does not reuse stale Docker layers for Apt package installation. Normal push, tag, pull request, and default manual builds still use GitHub Actions build cache (`cache-from: type=gha` and `cache-to: type=gha,mode=max`) for faster builds.
 
 Setup steps:
 
