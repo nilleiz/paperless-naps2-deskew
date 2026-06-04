@@ -11,6 +11,7 @@ configure_naps2_environment() {
   export XDG_DATA_HOME=/naps2/.local/share
   export XDG_CACHE_HOME=/naps2/.cache
   export DOTNET_CLI_HOME=/naps2/.dotnet
+  export PDF_RENDER_DPI="${PDF_RENDER_DPI:-300}"
 }
 
 create_naps2_directories() {
@@ -139,9 +140,44 @@ move_original() {
   mv -- "$source" "$target"
 }
 
+print_naps2_logs() {
+  local log_file
+  for log_file in "${XDG_CONFIG_HOME}/naps2/errorlog.txt" "${XDG_CONFIG_HOME}/naps2/debuglog.txt"; do
+    if [[ -s "$log_file" ]]; then
+      log "processing failure: printing NAPS2 log path=$log_file"
+      sed 's/^/NAPS2 log: /' "$log_file" || true
+    fi
+  done
+}
+
+build_image_import_list() {
+  local page_dir="$1"
+  local image image_import_list
+  local -a images
+
+  images=()
+  while IFS= read -r -d '' image; do
+    images+=("$image")
+  done < <(find "$page_dir" -maxdepth 1 -type f -name '*.png' -print0 | sort -zV)
+
+  if [[ "${#images[@]}" -eq 0 ]]; then
+    return 1
+  fi
+
+  image_import_list=""
+  for image in "${images[@]}"; do
+    if [[ -n "$image_import_list" ]]; then
+      image_import_list+=';'
+    fi
+    image_import_list+="$image"
+  done
+
+  printf '%s\n' "$image_import_list"
+}
+
 process_pdf() {
   local input_file="$1"
-  local filename work_dir work_input final_output tmp_output result_output
+  local filename work_dir work_input page_dir final_output tmp_output result_output image_import_list
   local -a extra_args naps2_cmd
 
   filename="$(basename -- "$input_file")"
@@ -168,7 +204,22 @@ process_pdf() {
   log "processing start: input=$input_file output=$final_output"
 
   work_input="${work_dir}/${filename}"
+  page_dir="${work_dir}/pages"
+  mkdir -p "$page_dir"
   cp -p -- "$input_file" "$work_input"
+
+  log "processing start: rasterizing input=$input_file dpi=${PDF_RENDER_DPI}"
+  if ! pdftoppm -r "${PDF_RENDER_DPI}" -png "$work_input" "${page_dir}/page"; then
+    log "processing failure: PDF rasterization failed input=$input_file"
+    move_original "$input_file" "${INPUT_DIR}/.failed"
+    return 0
+  fi
+
+  if ! image_import_list="$(build_image_import_list "$page_dir")"; then
+    log "processing failure: PDF rasterization produced no PNG pages input=$input_file"
+    move_original "$input_file" "${INPUT_DIR}/.failed"
+    return 0
+  fi
 
   extra_args=()
   if [[ -n "${NAPS2_EXTRA_ARGS:-}" ]]; then
@@ -176,11 +227,12 @@ process_pdf() {
     extra_args=( ${NAPS2_EXTRA_ARGS} )
   fi
 
-  naps2_cmd=(naps2 console -i "$work_input" -n 0 --deskew --disableocr "${extra_args[@]}" -o "$result_output")
+  naps2_cmd=(naps2 console -i "$image_import_list" -n 0 --deskew --disableocr "${extra_args[@]}" -o "$result_output" -f)
 
   if "${naps2_cmd[@]}"; then
     if [[ ! -s "$result_output" ]]; then
       log "processing failure: NAPS2 completed but produced no output input=$input_file"
+      print_naps2_logs
       move_original "$input_file" "${INPUT_DIR}/.failed"
       return 0
     fi
@@ -197,6 +249,7 @@ process_pdf() {
     fi
   else
     log "processing failure: input=$input_file"
+    print_naps2_logs
     move_original "$input_file" "${INPUT_DIR}/.failed"
   fi
 }
@@ -211,7 +264,12 @@ run_watcher() {
     exit 1
   fi
 
-  log "startup: watching input=${INPUT_DIR} output=${OUTPUT_DIR} poll_seconds=${POLL_SECONDS} archive_originals=${ARCHIVE_ORIGINALS}"
+  if ! command -v pdftoppm >/dev/null 2>&1; then
+    log "startup: pdftoppm command not found"
+    exit 1
+  fi
+
+  log "startup: watching input=${INPUT_DIR} output=${OUTPUT_DIR} poll_seconds=${POLL_SECONDS} archive_originals=${ARCHIVE_ORIGINALS} pdf_render_dpi=${PDF_RENDER_DPI}"
 
   while :; do
     while IFS= read -r -d '' file; do

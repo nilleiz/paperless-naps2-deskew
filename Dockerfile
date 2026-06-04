@@ -5,6 +5,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 ENV INPUT_DIR=/input \
     OUTPUT_DIR=/output \
     POLL_SECONDS=10 \
+    PDF_RENDER_DPI=300 \
     ARCHIVE_ORIGINALS=true \
     NAPS2_EXTRA_ARGS="" \
     PUID=1000 \
@@ -18,7 +19,7 @@ ENV INPUT_DIR=/input \
 
 RUN set -eux; \
     apt-get update; \
-    apt-get install -y --no-install-recommends ca-certificates curl gnupg gosu bash coreutils findutils; \
+    apt-get install -y --no-install-recommends ca-certificates curl gnupg gosu bash coreutils findutils poppler-utils; \
     install -d -m 0755 /etc/apt/keyrings; \
     curl -fsSL https://www.naps2.com/naps2-public.pgp | gpg --dearmor -o /etc/apt/keyrings/naps2.gpg; \
     echo "deb [signed-by=/etc/apt/keyrings/naps2.gpg] https://downloads.naps2.com ./" > /etc/apt/sources.list.d/naps2.list; \
