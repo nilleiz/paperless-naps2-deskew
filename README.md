@@ -208,6 +208,21 @@ environment:
 
 Also verify host permissions on both mounted directories. If you mount a persistent NAPS2 config directory to `/naps2`, make sure the configured `PUID`/`PGID` can write to it as well.
 
+### NAPS2 cannot import PNG pages / GdkPixbuf missing
+
+If logs show `System.DllNotFoundException: GdkPixbuf`, `libgdk_pixbuf-2.0.so.0`, or `Error importing image: .../pages/page-1.png`, the image is missing GTK/GdkPixbuf runtime libraries required by NAPS2 to load the rendered PNG pages. Pull a newer image and recreate the container:
+
+```bash
+docker compose pull paperless-naps2-deskew
+docker compose up -d --force-recreate paperless-naps2-deskew
+```
+
+You can verify a fixed image by checking that GdkPixbuf resolves inside the container:
+
+```bash
+ldconfig -p | grep libgdk_pixbuf-2.0.so.0
+```
+
 ### Failed files
 
 Files that fail NAPS2 processing are moved to:

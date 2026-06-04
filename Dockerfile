@@ -19,12 +19,27 @@ ENV INPUT_DIR=/input \
 
 RUN set -eux; \
     apt-get update; \
-    apt-get install -y --no-install-recommends ca-certificates curl gnupg gosu bash coreutils findutils poppler-utils; \
+    apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        gnupg \
+        gosu \
+        bash \
+        coreutils \
+        findutils \
+        poppler-utils \
+        libgdk-pixbuf-2.0-0 \
+        libgtk-3-0 \
+        libglib2.0-0 \
+        libcairo2 \
+        libpango-1.0-0 \
+        libpangocairo-1.0-0; \
     install -d -m 0755 /etc/apt/keyrings; \
     curl -fsSL https://www.naps2.com/naps2-public.pgp | gpg --dearmor -o /etc/apt/keyrings/naps2.gpg; \
     echo "deb [signed-by=/etc/apt/keyrings/naps2.gpg] https://downloads.naps2.com ./" > /etc/apt/sources.list.d/naps2.list; \
     apt-get update; \
     apt-get install -y --no-install-recommends naps2; \
+    ldconfig -p | grep libgdk_pixbuf-2.0.so.0; \
     groupadd --gid 1000 naps2; \
     useradd --uid 1000 --gid 1000 --home-dir /naps2 --create-home --shell /usr/sbin/nologin naps2; \
     mkdir -p /input /output /naps2/.config /naps2/.local/share /naps2/.cache /naps2/.dotnet /tmp/paperless-naps2-deskew; \
