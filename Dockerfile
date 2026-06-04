@@ -5,7 +5,15 @@ ARG DEBIAN_FRONTEND=noninteractive
 ENV INPUT_DIR=/input \
     OUTPUT_DIR=/output \
     POLL_SECONDS=10 \
-    PDF_RENDER_DPI=300 \
+    PDF_RENDER_DPI=auto \
+    PDF_RENDER_DPI_FALLBACK=200 \
+    PDF_RENDER_DPI_MIN=150 \
+    PDF_RENDER_DPI_MAX=300 \
+    POSTPROCESS_GHOSTSCRIPT=true \
+    GS_DOWNSAMPLE_DPI=auto \
+    GS_DOWNSAMPLE_DPI_FALLBACK=200 \
+    GS_JPEG_QUALITY=90 \
+    GS_COMPATIBILITY_LEVEL=1.7 \
     ARCHIVE_ORIGINALS=true \
     NAPS2_EXTRA_ARGS="" \
     PUID=1000 \
@@ -27,6 +35,7 @@ RUN set -eux; \
         bash \
         coreutils \
         findutils \
+        ghostscript \
         poppler-utils \
         libgdk-pixbuf-2.0-0 \
         libgtk-3-0 \
