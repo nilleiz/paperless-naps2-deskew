@@ -1,0 +1,16 @@
+services:
+  paperless-naps2-deskew:
+    image: nillivanilli0815/paperless-naps2-deskew:latest
+    container_name: paperless-naps2-deskew
+    restart: unless-stopped
+    environment:
+      PUID: 1000
+      PGID: 1000
+      INPUT_DIR: /input
+      OUTPUT_DIR: /output
+      POLL_SECONDS: 10
+      ARCHIVE_ORIGINALS: "true"
+      NAPS2_EXTRA_ARGS: ""
+    volumes:
+      - /mnt/gd/paperless-ngx/scans:/input
+      - /mnt/gd/paperless-ngx/consume:/output
