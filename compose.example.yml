@@ -21,7 +21,7 @@ services:
       ARCHIVE_ORIGINALS: "true"
       NAPS2_EXTRA_ARGS: ""
     volumes:
-      - /mnt/gd/paperless-ngx/scans:/input
-      - /mnt/gd/paperless-ngx/consume:/output
+      - /path/to/paperless-ngx/scans:/input
+      - /path/to/paperless-ngx/consume:/output
       # Optional: persist NAPS2/.NET config and cache data
-      # - /mnt/gd/paperless-ngx/naps2-config:/naps2
+      # - /path/to/paperless-ngx/naps2-config:/naps2

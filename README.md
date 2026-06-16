@@ -14,7 +14,7 @@ Recommended Paperless settings for this flow:
 services:
   webserver:
     volumes:
-      - /mnt/gd/paperless-ngx/consume:/usr/src/paperless/consume
+      - /path/to/paperless-ngx/consume:/usr/src/paperless/consume
     environment:
       PAPERLESS_OCR_DESKEW: "false"
       PAPERLESS_OCR_CLEAN: "none"
@@ -23,13 +23,13 @@ services:
 
 ## How the flow works
 
-1. Your scanner writes PDFs to `/mnt/gd/paperless-ngx/scans`.
+1. Your scanner writes PDFs to `/path/to/paperless-ngx/scans`.
 2. `paperless-naps2-deskew` watches that folder as `/input`.
 3. For each stable top-level PDF, the container copies it to a temporary work directory and detects the embedded scan DPI with Poppler `pdfimages -list`.
 4. It rasterizes pages to PNG images with Poppler `pdftoppm` at the selected source-aware DPI, then runs NAPS2 deskewing on those images.
 5. The NAPS2 PDF is optionally post-processed with Ghostscript to downsample and JPEG-compress scan images without using OCRmyPDF.
-6. The deskewed image-based PDF is written atomically to `/mnt/gd/paperless-ngx/consume` as `/output`.
-7. Paperless-ngx consumes files from `/mnt/gd/paperless-ngx/consume` and performs OCR afterward.
+6. The deskewed image-based PDF is written atomically to `/path/to/paperless-ngx/consume` as `/output`.
+7. Paperless-ngx consumes files from `/path/to/paperless-ngx/consume` and performs OCR afterward.
 8. On success, the original input is moved to `/input/.processed` when `ARCHIVE_ORIGINALS=true`; otherwise it is deleted.
 9. On failure, the original input is moved to `/input/.failed`.
 
@@ -61,10 +61,10 @@ services:
       ARCHIVE_ORIGINALS: "true"
       NAPS2_EXTRA_ARGS: ""
     volumes:
-      - /mnt/gd/paperless-ngx/scans:/input
-      - /mnt/gd/paperless-ngx/consume:/output
+      - /path/to/paperless-ngx/scans:/input
+      - /path/to/paperless-ngx/consume:/output
       # Optional: persist NAPS2/.NET config and cache data
-      # - /mnt/gd/paperless-ngx/naps2-config:/naps2
+      # - /path/to/paperless-ngx/naps2-config:/naps2
 ```
 
 A standalone copy of this service is available in [`compose.example.yml`](compose.example.yml).
@@ -112,7 +112,7 @@ On startup, the container creates these directories and chowns `/naps2` to the c
 
 ```yaml
 volumes:
-  - /mnt/gd/paperless-ngx/naps2-config:/naps2
+  - /path/to/paperless-ngx/naps2-config:/naps2
 ```
 
 ## NAPS2 command
@@ -280,10 +280,10 @@ Set `ARCHIVE_ORIGINALS=false` if you want originals deleted after successful pre
 
 Paperless must consume from the deskew output folder, not the scanner input folder. For the example layout:
 
-- scanner staging: `/mnt/gd/paperless-ngx/scans`
-- deskew output / Paperless consume: `/mnt/gd/paperless-ngx/consume`
+- scanner staging: `/path/to/paperless-ngx/scans`
+- deskew output / Paperless consume: `/path/to/paperless-ngx/consume`
 
-If Paperless imports files before NAPS2 processes them, the Paperless consume volume is probably mounted to `/mnt/gd/paperless-ngx/scans` by mistake.
+If Paperless imports files before NAPS2 processes them, the Paperless consume volume is probably mounted to `/path/to/paperless-ngx/scans` by mistake.
 
 ### Existing text layers and scanned-PDF assumptions
 
